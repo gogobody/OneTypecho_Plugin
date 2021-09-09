@@ -29,6 +29,10 @@ if (!defined('__TYPECHO_ROOT_DIR__')) exit;
  * @link https://geekscholar.net
  *
  */
+require_once 'libs/CircleFollow.php';
+require_once 'libs/UserFollow.php';
+
+require_once 'widget/Widget_Contents_Modify.php';
 
 class OneTypecho_Plugin implements Typecho_Plugin_Interface
 {
@@ -41,6 +45,9 @@ class OneTypecho_Plugin implements Typecho_Plugin_Interface
      */
     public static function activate()
     {
+        CircleFollow::init();
+        UserFollow::init();
+
         self::sqlInstall();
         $base = '/onetypecho/v1';
         $setting = $base.'/setting';
@@ -86,6 +93,8 @@ class OneTypecho_Plugin implements Typecho_Plugin_Interface
         Helper::addRoute('get_my_posts',$post.'/my','OneTypecho_Action','get_my_posts');
         //二维码
         Helper::addRoute('get_wxacode',$post.'/wxacode','OneTypecho_Action','get_wxacode');
+        Helper::addRoute('get_bdacode',$post.'/bdacode','OneTypecho_Action','get_bdacode');
+        Helper::addRoute('get_qqacode',$post.'/qqacode','OneTypecho_Action','get_qqacode');
 
 
         $user = $base.'/user';
@@ -100,6 +109,12 @@ class OneTypecho_Plugin implements Typecho_Plugin_Interface
         Helper::addRoute('user_like',$user.'/like','OneTypecho_Action','user_like');
         //用户收藏
         Helper::addRoute('user_favorite',$user.'/favorite','OneTypecho_Action','user_favorite');
+
+        $circle = $base.'/circle';
+        Helper::addRoute('circle_hot',$circle.'/hot','OneTypecho_Action','circle_hot');
+        Helper::addRoute('circle_hot_list',$circle.'/hot_list','OneTypecho_Action','circle_hot_list');
+        Helper::addRoute('circle_follow_user',$circle.'/follow_user','OneTypecho_Action','circle_follow_user');
+        Helper::addRoute('circle_cancel_follow_user',$circle.'/cancelf_user','OneTypecho_Action','circle_cancel_follow_user');
 
     }
     
@@ -134,6 +149,9 @@ class OneTypecho_Plugin implements Typecho_Plugin_Interface
         Helper::removeRoute('get_hot_posts');
         Helper::removeRoute('get_my_posts');
         Helper::removeRoute('get_wxacode');
+        Helper::removeRoute('get_bdacode');
+        Helper::removeRoute('get_qqacode');
+
 
         Helper::removeRoute('user_login');
         Helper::removeRoute('user_login3');
@@ -141,6 +159,12 @@ class OneTypecho_Plugin implements Typecho_Plugin_Interface
         Helper::removeRoute('user_index');
         Helper::removeRoute('user_like');
         Helper::removeRoute('user_favorite');
+
+        Helper::removeRoute('circle_hot');
+        Helper::removeRoute('circle_hot_list');
+        Helper::removeRoute('circle_follow_user');
+        Helper::removeRoute('circle_cancel_follow_user');
+
 
     }
     

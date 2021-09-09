@@ -2,7 +2,12 @@
 header('Access-Control-Allow-Origin: *');
 error_reporting(E_ALL ^ E_WARNING);
 require_once 'Utils.php';
-define('UPLOAD_DIR' , '/usr/uploads');
+require_once 'libs/CircleFollow.php';
+require_once 'libs/UserFollow.php';
+
+require_once 'widget/Widget_Contents_Modify.php';
+
+define('UPLOAD_DIR', '/usr/uploads');
 
 class OneTypecho_Action extends Typecho_Widget implements Widget_Interface_Do
 {
@@ -24,8 +29,8 @@ class OneTypecho_Action extends Typecho_Widget implements Widget_Interface_Do
         parent::__construct($request, $response, $params);
         $this->db = Typecho_Db::get();
         $this->res = new Typecho_Response();
-        $this->plugin_dir = Helper::options()->pluginDir('OneTypecho').'/OneTypecho';
-//        var_dump($this->request->getRequestUrl());
+        $this->plugin_dir = Helper::options()->pluginDir('OneTypecho') . '/OneTypecho';
+
         if (method_exists($this, $this->request->type)) {
             call_user_func(array(
                 $this,
@@ -51,6 +56,7 @@ class OneTypecho_Action extends Typecho_Widget implements Widget_Interface_Do
 
         return false;
     }
+
     //组合返回值
     public function make_response($code, $msg, $data = null)
     {
@@ -65,6 +71,7 @@ class OneTypecho_Action extends Typecho_Widget implements Widget_Interface_Do
         $this->response->throwJson($response);
         return $response;
     }
+
     //组合返回值 成功
     public function make_success($data = null)
     {
@@ -76,20 +83,26 @@ class OneTypecho_Action extends Typecho_Widget implements Widget_Interface_Do
     {
         return $this->make_response($code, $msg);
     }
+
+    public function make_error_notlogin($msg = '', $code = -1)
+    {
+        return $this->make_response($code, $msg);
+    }
+
     /**
      * 解析分类描述中的图片，格式<imgurl>
      * @param $defaultSlugUrl
      * @param $desc
      * @return mixed|string
      */
-    function parseDesc2img($desc,$defaultSlugUrl=null)
+    function parseDesc2img($desc, $defaultSlugUrl = null)
     {
         $preg = '/^<(.*)>([\s\S]*)/';
         preg_match($preg, $desc, $res);
         if (isset($res[1])) {
             return $res[1];
         }
-        if (!$defaultSlugUrl){
+        if (!$defaultSlugUrl) {
             $defaultSlugUrl = "https://img.icons8.com/dusk/2x/categorize.png";
         }
         return $defaultSlugUrl;
@@ -111,32 +124,36 @@ class OneTypecho_Action extends Typecho_Widget implements Widget_Interface_Do
      * @param string $trim
      * @return string
      */
-    function tp_trim_words($content,$length = 100, $trim = '...'){
+    function tp_trim_words($content, $length = 100, $trim = '...')
+    {
         return Typecho_Common::subStr(strip_tags($content), 0, $length, $trim);
     }
+
     /**
      * 获取目录
      * @param $args
      * @return array
      */
-    public function get_categories($args){
-        $cat_ids = !empty($args['include'])?$args['include']:null;
-        $exclude = !empty($args['exclude'])?$args['exclude']:null;
-        if (isset($cat_ids) && !empty($cat_ids[0])){
-            $select = $this->db->select()->from('table.metas')->where('type = ?','category')->where('mid IN ?',$cat_ids);
-        }elseif (isset($exclude) and !empty($exclude[0])){
-            $select = $this->db->select()->from('table.metas')->where('type = ?','category');
+    public function get_categories($args)
+    {
+        $cat_ids = !empty($args['include']) ? $args['include'] : null;
+        $exclude = !empty($args['exclude']) ? $args['exclude'] : null;
+        if (isset($cat_ids) && !empty($cat_ids[0])) {
+            $select = $this->db->select()->from('table.metas')->where('type = ?', 'category')->where('mid IN ?', $cat_ids);
+        } elseif (isset($exclude) and !empty($exclude[0])) {
+            $select = $this->db->select()->from('table.metas')->where('type = ?', 'category');
 
-            foreach ($exclude as $ext){
-                $select = $select->where('mid <> ?',$ext);
+            foreach ($exclude as $ext) {
+                $select = $select->where('mid <> ?', $ext);
             }
-        }else{
-            $select = $this->db->select()->from('table.metas')->where('type = ?','category');
+        } else {
+            $select = $this->db->select()->from('table.metas')->where('type = ?', 'category');
         }
         return $this->db->fetchAll($select);
     }
 
-    public function get_the_category($id){
+    public function get_the_category($id)
+    {
         return $this->db->fetchAll($this->db
             ->select()->from('table.metas')
             ->join('table.relationships', 'table.relationships.mid = table.metas.mid')
@@ -144,7 +161,8 @@ class OneTypecho_Action extends Typecho_Widget implements Widget_Interface_Do
             ->where('table.metas.type = ?', 'category'), array($this->widget('Widget_Abstract_Metas'), 'filter'));
     }
 
-    public function get_the_tags($id,$limit=2){
+    public function get_the_tags($id, $limit = 2)
+    {
         return $this->db->fetchAll($this->db
             ->select()->from('table.metas')
             ->join('table.relationships', 'table.relationships.mid = table.metas.mid')
@@ -152,8 +170,9 @@ class OneTypecho_Action extends Typecho_Widget implements Widget_Interface_Do
             ->where('table.metas.type = ?', 'tag')->limit($limit), array($this->widget('Widget_Abstract_Metas'), 'filter'));
     }
 
-    public function get_post_type($post_id){
-        return $this->db->fetchRow($this->db->select('type')->from('table.contents')->where('cid = ?',$post_id))['type'];
+    public function get_post_type($post_id)
+    {
+        return $this->db->fetchRow($this->db->select('type')->from('table.contents')->where('cid = ?', $post_id))['type'];
     }
 
     /**
@@ -164,52 +183,60 @@ class OneTypecho_Action extends Typecho_Widget implements Widget_Interface_Do
      * @param $key
      * @param $single
      */
-    public function get_post_meta($post_id,$key,$single){
-        if ($key == 'views'){
-            return $this->db->fetchRow($this->db->select('views')->from('table.contents')->where('cid = ?',$post_id))['views'];
-        }elseif ($key == 'favorites'){
-            return $this->db->fetchRow($this->db->select('favorites')->from('table.contents')->where('cid = ?',$post_id))['favorites'];
-        }elseif ($key == 'likes'){
-            return $this->db->fetchRow($this->db->select('likes')->from('table.contents')->where('cid = ?',$post_id))['likes'];
+    public function get_post_meta($post_id, $key, $single)
+    {
+        if ($key == 'views') {
+            return $this->db->fetchRow($this->db->select('views')->from('table.contents')->where('cid = ?', $post_id))['views'];
+        } elseif ($key == 'favorites') {
+            return $this->db->fetchRow($this->db->select('favorites')->from('table.contents')->where('cid = ?', $post_id))['favorites'];
+        } elseif ($key == 'likes') {
+            return $this->db->fetchRow($this->db->select('likes')->from('table.contents')->where('cid = ?', $post_id))['likes'];
 
         }
     }
 
-    public function update_post_meta($post_id,$key,$value){
-        if ($key == 'views'){
-            return $this->db->query($this->db->update('table.contents')->where('cid = ?',$post_id)->rows([
+    public function update_post_meta($post_id, $key, $value)
+    {
+        if ($key == 'views') {
+            return $this->db->query($this->db->update('table.contents')->where('cid = ?', $post_id)->rows([
                 'views' => $value
             ]));
-        }elseif ($key == 'likes'){
-            return $this->db->query($this->db->update('table.contents')->where('cid = ?',$post_id)->rows([
+        } elseif ($key == 'likes') {
+            return $this->db->query($this->db->update('table.contents')->where('cid = ?', $post_id)->rows([
                 'likes' => $value
             ]));
         }
     }
 
-    private function username_exists($open_id){
-        $user = $this->db->fetchRow($this->db->select('uid')->from('table.users')->where('name = ?',$open_id));
-        return $user['uid'] ? true:false;
+    private function username_exists($open_id)
+    {
+        $user = $this->db->fetchRow($this->db->select('uid')->from('table.users')->where('name = ?', $open_id));
+        return $user['uid'] ? true : false;
     }
 
-    private function get_user_by($type, $open_id){
-        if($type == 'login'){
-            return $this->db->fetchObject($this->db->select()->from('table.users')->where('name = ?',$open_id));
+    private function get_user_by($type, $open_id)
+    {
+        if ($type == 'login') {
+            return $this->db->fetchObject($this->db->select()->from('table.users')->where('name = ?', $open_id));
         }
     }
 
-    private function get_user_meta($user_id,$key){
-        return $this->db->fetchRow($this->db->select($key)->from('table.users')->where('uid = ?',$user_id))[$key];
+    private function get_user_meta($user_id, $key)
+    {
+        return $this->db->fetchRow($this->db->select($key)->from('table.users')->where('uid = ?', $user_id))[$key];
     }
 
-    private function tp_update_user($uid,$arr){
-        $this->db->query($this->db->update('table.users')->where('table.users.uid = ?',$uid)->rows($arr));
+    private function tp_update_user($uid, $arr)
+    {
+        $this->db->query($this->db->update('table.users')->where('table.users.uid = ?', $uid)->rows($arr));
         return $uid;
     }
 
-    public function get_post_excerpt($content,$length=50,$trim='...'){
+    public function get_post_excerpt($content, $length = 50, $trim = '...')
+    {
         Typecho_Common::subStr(strip_tags($content), 0, $length, $trim);
     }
+
     /**
      * 传入的是 post class 而不是 数据库原始数据
      * @param $posts
@@ -225,10 +252,11 @@ class OneTypecho_Action extends Typecho_Widget implements Widget_Interface_Do
                 'time' => $post['created'],
                 'title' => $post['title'],
                 'comment_count' => $post['commentsNum'],
-                'views' => $post['views']
+                'views' => $post['views'],
+                'uid' => $post['authorId'],
             ];
 
-            if (self::option_value('JSwitch_excerpt') == 'yes') {
+            if (self::option_value('JSwitch_excerpt') == '1') {
                 if ($post->excerpt) {
                     $item["excerpt"] = html_entity_decode(self::tp_trim_words($post['text'], 50, '...'));
                 } else {
@@ -275,43 +303,44 @@ class OneTypecho_Action extends Typecho_Widget implements Widget_Interface_Do
      * @param $select
      * @param $args
      */
-    public function queryPost($select,$args){
-        $select = $select->from('table.contents')->where('type = ? and status = ?','post','publish');
-        if (isset($args['category__not_in']) and !empty($args['category__not_in'][0])){
-            $select = $select->join('table.relationships', 'table.contents.cid = table.relationships.cid',Typecho_Db::LEFT_JOIN);
-            foreach ($args['category__not_in'] as $ext){
-                $select = $select->where('mid <> ?',$ext);
+    public function queryPost($select, $args)
+    {
+        $select = $select->from('table.contents')->where('type = ? and status = ?', 'post', 'publish');
+        if (isset($args['category__not_in']) and !empty($args['category__not_in'][0])) {
+            $select = $select->join('table.relationships', 'table.contents.cid = table.relationships.cid', Typecho_Db::LEFT_JOIN);
+            foreach ($args['category__not_in'] as $ext) {
+                $select = $select->where('mid <> ?', $ext);
             }
         }
-        if (isset($args['cat']) and !empty($args['cat'][0])){ //category
-            $select = $select->join('table.relationships', 'table.contents.cid = table.relationships.cid',Typecho_Db::LEFT_JOIN)->where('mid = ?',$args['cat']);
+        if (isset($args['cat']) and !empty($args['cat'][0])) { //category
+            $select = $select->join('table.relationships', 'table.contents.cid = table.relationships.cid', Typecho_Db::LEFT_JOIN)->where('mid = ?', $args['cat']);
         }
-        if (isset($args['tag_id']) and !empty($args['tag_id'][0])){ //tag
-            $select = $select->join('table.relationships', 'table.contents.cid = table.relationships.cid',Typecho_Db::LEFT_JOIN)->where('mid = ?',$args['tag_id']);
+        if (isset($args['tag_id']) and !empty($args['tag_id'][0])) { //tag
+            $select = $select->join('table.relationships', 'table.contents.cid = table.relationships.cid', Typecho_Db::LEFT_JOIN)->where('mid = ?', $args['tag_id']);
         }
-        if (isset($args['s']) and !empty($args['s'][0])){ //search
-            $select = $select->where('table.contents.title LIKE ? OR table.contents.text LIKE ?', '%'.$args['s'].'%', '%'.$args['s'].'%');
+        if (isset($args['s']) and !empty($args['s'][0])) { //search
+            $select = $select->where('table.contents.title LIKE ? OR table.contents.text LIKE ?', '%' . $args['s'] . '%', '%' . $args['s'] . '%');
         }
-        if (isset($args['post__not_in']) and !empty($args['post__not_in'][0])){
+        if (isset($args['post__not_in']) and !empty($args['post__not_in'][0])) {
             foreach ($args['post__not_in'] as $ext) {
                 $select = $select->where('cid <> ?', $ext);
             }
 //            $select = $select->where('cid NOT IN ?',$args['post__not_in']);
         }
-        if (isset($args['post__in']) and !empty($args['post__in'][0])){
-            $select = $select->where('cid IN ?',$args['post__in']);
+        if (isset($args['post__in']) and !empty($args['post__in'][0])) {
+            $select = $select->where('cid IN ?', $args['post__in']);
         }
 
-        if (isset($args['offset'])){
+        if (isset($args['offset'])) {
             $select = $select->offset($args['offset']);
         }
-        if (isset($args['posts_per_page'])){
+        if (isset($args['posts_per_page'])) {
             $select = $select->limit($args['posts_per_page']);
         }
-        if (isset($args['orderby']) and !empty($args['orderby'][0])){
-            if (array_key_exists('order',$args) && $args['order'] == 'DESC'){
-                $select = $select->order($args['orderby'],Typecho_Db::SORT_DESC);
-            }else{
+        if (isset($args['orderby']) and !empty($args['orderby'][0])) {
+            if (array_key_exists('order', $args) && $args['order'] == 'DESC') {
+                $select = $select->order($args['orderby'], Typecho_Db::SORT_DESC);
+            } else {
                 $select = $select->order($args['orderby']);
             }
         }
@@ -319,6 +348,7 @@ class OneTypecho_Action extends Typecho_Widget implements Widget_Interface_Do
 
         return $select;
     }
+
     /**
      * 获取置顶的文章
      */
@@ -328,14 +358,14 @@ class OneTypecho_Action extends Typecho_Widget implements Widget_Interface_Do
         if (!$sticky_posts) {
             return [];
         }
-        $sticky_posts = explode(',',$sticky_posts);
+        $sticky_posts = explode(',', $sticky_posts);
 //        $posts = [];
 //        foreach ($sticky_posts as $sticky_post) {
 //            $this->widget('Widget_Archive@'.$sticky_post, 'pageSize=1&type=post', 'cid='.$sticky_post)->to($post);
 //            $posts[] = $post;
 //        }
 //        return $posts;
-        return $this->db->fetchAll($this->db->select()->from('table.contents')->where('cid IN ?',$sticky_posts));
+        return $this->db->fetchAll($this->db->select()->from('table.contents')->where('cid IN ?', $sticky_posts));
     }
 
     /**
@@ -359,9 +389,9 @@ class OneTypecho_Action extends Typecho_Widget implements Widget_Interface_Do
                 $post['stick'] = 1;
             }
             $args['post__not_in'] = self::option_value('JSticky_posts');
-            $args['post__not_in'] = explode(',',$args['post__not_in']);
+            $args['post__not_in'] = explode(',', $args['post__not_in']);
             $select = $this->db->select();
-            $select = $this->queryPost($select,$args);
+            $select = $this->queryPost($select, $args);
 
             $common_posts = $this->db->fetchAll($select);
 
@@ -372,9 +402,9 @@ class OneTypecho_Action extends Typecho_Widget implements Widget_Interface_Do
 //            }
             $common_posts = $this->filter_post_for_list($common_posts);
             $posts = array_merge($posts_stick, $common_posts);
-        }else {
+        } else {
             $select = $this->db->select();
-            $select = $this->queryPost($select,$args);
+            $select = $this->queryPost($select, $args);
             $common_posts = $this->db->fetchAll($select);
 
 //            $common_posts = [];
@@ -418,7 +448,7 @@ class OneTypecho_Action extends Typecho_Widget implements Widget_Interface_Do
         }
 //        $pattern = '/\<img.*?src\=\"(.*?)\"[^>]*>/i';
         // 采用更严格的图片匹配模式
-        $pattern="/<[img|IMG].*?src=[\'|\"](.*?(?:[\.gif|\.jpeg|\.png|\.jpg]))[\'|\"].*?[\/]?>/";
+        $pattern = "/<[img|IMG].*?src=[\'|\"](.*?(?:[\.gif|\.jpeg|\.png|\.jpg]))[\'|\"].*?[\/]?>/";
         $patternMD = '/\!\[.*?\]\((http(s)?:\/\/.*?(jpg|jpeg|gif|png|webp))/i';
         $patternMDfoot = '/\[.*?\]:\s*(http(s)?:\/\/.*?(jpg|jpeg|gif|png|webp))/i';
         $t = preg_match_all($pattern, $content, $thumbUrl);
@@ -429,7 +459,7 @@ class OneTypecho_Action extends Typecho_Widget implements Widget_Interface_Do
             $img = $thumbUrl[1][0];
         } elseif (preg_match_all($patternMDfoot, $content, $thumbUrl)) {
             $img = $thumbUrl[1][0];
-        } elseif (!empty($default_thumb)){
+        } elseif (!empty($default_thumb)) {
             $img = $default_thumb;
         }
         return $img;
@@ -439,17 +469,19 @@ class OneTypecho_Action extends Typecho_Widget implements Widget_Interface_Do
      * @param $opt
      * @return array
      */
-    public static function getMutilineOptions($opt){
-        $opt_list = explode("\r\n",$opt);
+    public static function getMutilineOptions($opt)
+    {
+        $opt_list = explode("\r\n", $opt);
         $result = [];
-        foreach ($opt_list as $key=>$val){
-            $val_list = explode('||',trim($val));
+        foreach ($opt_list as $key => $val) {
+            $val_list = explode('||', trim($val));
             $result[] = $val_list;
         }
         return $result;
     }
 
     // 这里开始功能函数
+
     /**
      * 获取配置 首页
      */
@@ -487,7 +519,7 @@ class OneTypecho_Action extends Typecho_Widget implements Widget_Interface_Do
         if (!empty($slide_ids)) {
             $slide_ids = explode(',', $slide_ids);
 
-            $result = $this->db->fetchAll($this->db->select('cid','text')->from('table.contents')->where('cid IN ?',$slide_ids));
+            $result = $this->db->fetchAll($this->db->select('cid', 'text')->from('table.contents')->where('cid IN ?', $slide_ids));
             foreach ($result as $item) {
                 $slides[] = [
                     'id' => $item['cid'],
@@ -499,13 +531,13 @@ class OneTypecho_Action extends Typecho_Widget implements Widget_Interface_Do
 
         //图标导航
         $icon_nav_org = self::option_value('JHome_icon_nav');
-        $nav_list = explode("\r\n",trim($icon_nav_org));
+        $nav_list = explode("\r\n", trim($icon_nav_org));
 
         $icon_nav = [];
         if (is_array($nav_list) and !empty($nav_list)) {
             foreach ($nav_list as $item_list) {
-                $items = explode('||',trim($item_list));
-                if (isset($items) and !empty($items[0])){
+                $items = explode('||', trim($item_list));
+                if (isset($items) and !empty($items[0])) {
                     $item = [];
                     $item['icon'] = $items[0];
                     $item['title'] = $items[1];
@@ -518,11 +550,11 @@ class OneTypecho_Action extends Typecho_Widget implements Widget_Interface_Do
 
         //活动区域
         $JHome_active_left = self::option_value('JHome_active_left');
-        $active_left_arr = explode('||',$JHome_active_left);
+        $active_left_arr = explode('||', $JHome_active_left);
         $JHome_active_right_top = self::option_value('JHome_active_right_top');
-        $active_right_top_arr = explode('||',$JHome_active_right_top);
+        $active_right_top_arr = explode('||', $JHome_active_right_top);
         $JHome_active_right_down = self::option_value('JHome_active_right_down');
-        $active_right_down_arr = explode('||',$JHome_active_right_down);
+        $active_right_down_arr = explode('||', $JHome_active_right_down);
 
         if (!empty($JHome_active_left) && !empty($active_left_arr[0]) && !empty($active_right_top_arr[0]) && !empty($active_right_down_arr[0])) {
             $data['actives'] = [
@@ -552,7 +584,7 @@ class OneTypecho_Action extends Typecho_Widget implements Widget_Interface_Do
         $hot_ids = explode(',', $hot_ids);
 
         if (!empty($hot_ids)) {
-            $result = $this->db->fetchAll($this->db->select('cid','title','text')->from('table.contents')->where('cid IN ?',$hot_ids));
+            $result = $this->db->fetchAll($this->db->select('cid', 'title', 'text')->from('table.contents')->where('cid IN ?', $hot_ids));
             foreach ($result as $item) {
                 $hots[] = [
                     'id' => $item['cid'],
@@ -646,6 +678,7 @@ class OneTypecho_Action extends Typecho_Widget implements Widget_Interface_Do
             'background' => $background
         ]);
     }
+
     /**
      * 获取所有分类
      * @throws Typecho_Plugin_Exception
@@ -653,7 +686,7 @@ class OneTypecho_Action extends Typecho_Widget implements Widget_Interface_Do
     public function get_index()
     {
         $hide_cat = self::option_value('JHide_cat');
-        $hide_cat = explode(',',$hide_cat);
+        $hide_cat = explode(',', $hide_cat);
         $args = [];
         if (!empty($hide_cat)) {
             $args['exclude'] = $hide_cat;
@@ -666,7 +699,7 @@ class OneTypecho_Action extends Typecho_Widget implements Widget_Interface_Do
                 'id' => $cat['mid'],
                 'name' => $cat['name'],
                 'description' => $this->parseDesc2text($cat['description']),
-                'cover' => $this->parseDesc2img($cat['description'],null)
+                'cover' => $this->parseDesc2img($cat['description'], null)
             ];
         }
 
@@ -751,9 +784,9 @@ class OneTypecho_Action extends Typecho_Widget implements Widget_Interface_Do
         }
 
         $table_post_search = $this->db->getPrefix() . 'one_post_search';//"SELECT times FROM `$table_post_search` WHERE search=%s", $search
-        $times = $this->db->fetchObject($this->db->select('times')->from('table.one_post_search')->where('search = ?',$search))->times;
+        $times = $this->db->fetchObject($this->db->select('times')->from('table.one_post_search')->where('search = ?', $search))->times;
         if (empty($times)) {
-            $this->db->query($this->db->insert($table_post_search)->rows( [
+            $this->db->query($this->db->insert($table_post_search)->rows([
                 'search' => $search,
                 'times' => 1
             ]));
@@ -777,6 +810,7 @@ class OneTypecho_Action extends Typecho_Widget implements Widget_Interface_Do
         $posts = $this->get_posts($args);
         return $this->make_success($posts);
     }
+
     /**
      * 热门搜索
      * @throws Typecho_Db_Exception
@@ -797,12 +831,12 @@ class OneTypecho_Action extends Typecho_Widget implements Widget_Interface_Do
      */
     public function get_post_detail()
     {
-        $post_id = $this->request->get( 'post_id');
+        $post_id = $this->request->get('post_id');
         if (!$post_id) {
             return $this->make_error('缺少参数');
         }
 
-        $this->widget('Widget_Archive@tmp_'.$post_id, 'pageSize=1&type=post', 'cid='.$post_id)->to($postObj);
+        $this->widget('Widget_Archive@tmp_' . $post_id, 'pageSize=1&type=post', 'cid=' . $post_id)->to($postObj);
 //        $postObj = $this->db->fetchObject($this->db->select()->from('table.contents')->where('cid = ?',$post_id));
         $post = [
             'id' => $postObj->cid,
@@ -855,7 +889,7 @@ class OneTypecho_Action extends Typecho_Widget implements Widget_Interface_Do
         $post['like_list'] = [];
         if (!empty($users)) {
             foreach ($users as $user) {
-                $mail = empty($user['user_mail'])?'':$user['user_mail'];
+                $mail = empty($user['user_mail']) ? '' : $user['user_mail'];
                 $post['like_list'][] = Utils::ParseAvatar($mail);
             }
         }
@@ -864,7 +898,7 @@ class OneTypecho_Action extends Typecho_Widget implements Widget_Interface_Do
         $post['favorites'] = self::get_post_meta($post_id, "favorites", true);
 
         //能否评论
-        $post['switch_comment'] = self::option_value('JSwitch_comment')==='1'?1:0;
+        $post['switch_comment'] = self::option_value('JSwitch_comment') === '1' ? 1 : 0;
 
         //用户数据
         $user = [];
@@ -872,16 +906,16 @@ class OneTypecho_Action extends Typecho_Widget implements Widget_Interface_Do
         $user_id = self::check_login();
         if ($user_id) {
             $table_post_like = $this->db->getPrefix() . 'one_post_like';
-            $post_like_id = $this->db->fetchRow($this->db->query("SELECT id FROM `$table_post_like` WHERE user_id=".$user_id." AND post_id=".$post_id))['id'];
+            $post_like_id = $this->db->fetchRow($this->db->query("SELECT id FROM `$table_post_like` WHERE user_id=" . $user_id . " AND post_id=" . $post_id))['id'];
             $user['islike'] = $post_like_id ? 1 : 0;
 
             $table_post_favorite = $this->db->getPrefix() . 'one_post_favorite';
-            $post_favorite_id = $this->db->fetchRow($this->db->query("SELECT id FROM `$table_post_favorite` WHERE user_id=".$user_id." AND post_id=".$post_id))['id'];
+            $post_favorite_id = $this->db->fetchRow($this->db->query("SELECT id FROM `$table_post_favorite` WHERE user_id=" . $user_id . " AND post_id=" . $post_id))['id'];
             $user['isfavorite'] = $post_favorite_id ? 1 : 0;
 
             //添加文章浏览记录
             $table_post_view = $this->db->getPrefix() . 'one_post_view';
-            $post_view_id = $this->db->fetchRow($this->db->query("SELECT id FROM `$table_post_view` WHERE user_id=".$user_id." AND post_id=".$post_id))['id'];
+            $post_view_id = $this->db->fetchRow($this->db->query("SELECT id FROM `$table_post_view` WHERE user_id=" . $user_id . " AND post_id=" . $post_id))['id'];
             if (!$post_view_id) {
                 $this->db->query($this->db->insert($table_post_view)->rows([
                     'user_id' => $user_id,
@@ -890,6 +924,15 @@ class OneTypecho_Action extends Typecho_Widget implements Widget_Interface_Do
             }
         }
         $post['user'] = $user;
+        //author
+        $author = [
+            'uid' => $postObj->author->uid,
+            'username' => $postObj->author->screenName,
+            'intro' => $postObj->author->userSign==""?'该用户太懒了~':$postObj->author->userSign,
+            'avatar' => empty($postObj->author->avatarUrl) ? $postObj->author->userAvatar : $postObj->author->avatarUrl,
+            'is_follow' => UserFollow::statusFollow($user_id, $postObj->author->uid)
+        ];
+        $post['author'] = $author;
 
         return $this->make_success($post);
     }
@@ -900,13 +943,13 @@ class OneTypecho_Action extends Typecho_Widget implements Widget_Interface_Do
      */
     public function get_post_page()
     {
-        $page_id = $this->request->get( 'page_id');
+        $page_id = $this->request->get('page_id');
         if (!$page_id) {
             return $this->make_error('缺少参数');
         }
 
 //        $table_post = $this->db->getPrefix() . 'posts';
-        $this->widget('Widget_Archive@tmpage_'.$page_id, 'pageSize=1&type=page', 'cid='.$page_id)->to($post);
+        $this->widget('Widget_Archive@tmpage_' . $page_id, 'pageSize=1&type=page', 'cid=' . $page_id)->to($post);
 //        $post = $this->db->fetchObject($this->db->select()->from('table.contents')->where('cid = ?',$page_id));
         $page['title'] = $post->title;
         $page['content'] = $post->content;
@@ -943,7 +986,7 @@ class OneTypecho_Action extends Typecho_Widget implements Widget_Interface_Do
         }
 
         $select = $this->db->select();
-        $select = $this->queryPost($select,$args);
+        $select = $this->queryPost($select, $args);
         $common_posts = $this->db->fetchAll($select);
 
 //        $common_posts = [];
@@ -999,7 +1042,7 @@ class OneTypecho_Action extends Typecho_Widget implements Widget_Interface_Do
             $field = 'post_id';
             $orderby = 'id';
         } else if ($track == 'comments') {
-            $table_name = $this->db->getPrefix(). 'comments';
+            $table_name = $this->db->getPrefix() . 'comments';
             $field = 'cid';
             $orderby = 'coid';
         } else if ($track == 'favorites') {
@@ -1009,9 +1052,9 @@ class OneTypecho_Action extends Typecho_Widget implements Widget_Interface_Do
         }
 
         $per_page_count = self::POSTS_PER_PAGE;
-        if ($track == 'comments'){
+        if ($track == 'comments') {
             $post_ids = $this->db->fetchAll($this->db->query("SELECT distinct $field,$orderby FROM `$table_name` WHERE authorId=$user_id ORDER BY $orderby DESC LIMIT $offset, $per_page_count"));
-        }else{
+        } else {
             $post_ids = $this->db->fetchAll($this->db->query("SELECT distinct $field,$orderby FROM `$table_name` WHERE user_id=$user_id ORDER BY $orderby DESC LIMIT $offset, $per_page_count"));
         }
         if (empty($post_ids)) {
@@ -1037,7 +1080,7 @@ class OneTypecho_Action extends Typecho_Widget implements Widget_Interface_Do
     public function get_wxacode()
     {
         $post_id = $this->request->get('post_id', 0);
-        $plantform = $this->request->get('plantform', '');
+        $plantform = $this->request->get('plantform', 'mp-weixin');
         if (!$post_id or !$plantform) {
             return $this->make_error('缺少参数');
         }
@@ -1048,20 +1091,20 @@ class OneTypecho_Action extends Typecho_Widget implements Widget_Interface_Do
         $uploads = self::tp_uploads_dir();
         $qrcode_path = $uploads['path'] . '/wxacode/';
         if (!is_dir($qrcode_path)) {
-            mkdir($qrcode_path, 0755,true);
+            mkdir($qrcode_path, 0755, true);
         }
 
         // 小程序码数量有限，所以不再单独为每篇文章生成
-        if ($plantform == 'mp-weixin'){
+        if ($plantform == 'mp-weixin') {
             $session = $this->getWXSession();
             $post_type = 'mp-weixin';
             $baseUrl = 'https://api.weixin.qq.com/wxa/getwxacodeunlimit?access_token=';
-        }elseif ($plantform == 'mp-qq'){
+        } elseif ($plantform == 'mp-qq') {
             $session = $this->getQQSession();
             $post_type = 'mp-qq';
             $baseUrl = 'https://api.q.qq.com/api/json/qqa/CreateMiniCode?access_token=';
 
-        }else{
+        } else {
             return $this->make_error("不支持的平台");
         }
         $qrcode = $qrcode_path . 'wxacode-' . $post_type . '-' . $post_id . '.png';
@@ -1076,7 +1119,7 @@ class OneTypecho_Action extends Typecho_Widget implements Widget_Interface_Do
             return $this->make_error('获取二维码失败');
         }
 
-        $api =  $baseUrl. $access_token;
+        $api = $baseUrl . $access_token;
 
         $color = array(
             "r" => "0",  //这个颜色码自己到Photoshop里设
@@ -1085,7 +1128,7 @@ class OneTypecho_Action extends Typecho_Widget implements Widget_Interface_Do
         );
 
         $page = 'pages/article/article';
-        if ($plantform == 'mp-weixin'){
+        if ($plantform == 'mp-weixin') {
             $data = array(
                 'scene' => $post_id, //TODO 自定义信息，可以填写诸如识别用户身份的字段，注意用中文时的情况
                 'page' => $page, // 前端传过来的页面path,不能为空，最大长度 128 字节
@@ -1095,7 +1138,7 @@ class OneTypecho_Action extends Typecho_Widget implements Widget_Interface_Do
                 'line_color' => $color, // auth_color 为 false 时生效，使用 rgb 设置颜色 例如 {"r":"xxx","g":"xxx","b":"xxx"},十进制表示
                 'is_hyaline' => true, // 是否需要透明底色， is_hyaline 为true时，生成透明底色的小程序码
             );
-        }elseif ($plantform == 'mp-qq'){
+        } elseif ($plantform == 'mp-qq') {
             $data = array(
                 'scene' => $post_id, //TODO 自定义信息，可以填写诸如识别用户身份的字段，注意用中文时的情况
                 'appid' => self::option_value('qq_app_id'),
@@ -1106,7 +1149,7 @@ class OneTypecho_Action extends Typecho_Widget implements Widget_Interface_Do
                 'line_color' => $color, // auth_color 为 false 时生效，使用 rgb 设置颜色 例如 {"r":"xxx","g":"xxx","b":"xxx"},十进制表示
                 'is_hyaline' => true, // 是否需要透明底色， is_hyaline 为true时，生成透明底色的小程序码
             );
-        }else{
+        } else {
             return $this->make_error("不支持的平台");
         }
 
@@ -1115,21 +1158,150 @@ class OneTypecho_Action extends Typecho_Widget implements Widget_Interface_Do
             return $this->make_error('系统异常');
         }
 
-//        $content = wp_remote_retrieve_body($remote);
-//        if (strstr($content, 'errcode') !== false || strstr($content, 'errmsg') !== false) {
-//            $json = json_decode($content, TRUE);
-//            // return $this->make_error($json['errmsg']);
-//            return $this->make_success(plugins_url('/one-pro/public/images/wxacode.jpg'));
-//        }
+
         $write_fd = @fopen($qrcode, 'w+');
         if (fwrite($write_fd, $content)) {
             fclose($write_fd);
         }
-        //输出二维码
-//        file_put_contents($qrcode, $content);
 
-        //同步到媒体库
-//        $this->handle_import_file($qrcode);
+        return $this->make_success($qrcode_link);
+    }
+
+    /**
+     * 获取百度小程序码
+     * @throws Typecho_Plugin_Exception
+     */
+    public function get_bdacode()
+    {
+        $post_id = $this->request->get('post_id', 0);
+        if (!$post_id) {
+            return $this->make_error('缺少参数');
+        }
+
+        $post_type = self::get_post_type($post_id);
+
+
+        $uploads = self::tp_uploads_dir();
+        $qrcode_path = $uploads['path'] . '/bdacode/';
+        if (!is_dir($qrcode_path)) {
+            mkdir($qrcode_path, 0755, true);
+        }
+
+        // 小程序码数量有限，所以不再单独为每篇文章生成
+        $session = $this->getBDSession();
+        $post_type = 'mp-baidu';
+        $baseUrl = 'https://openapi.baidu.com/rest/2.0/smartapp/qrcode/getunlimited?access_token=';
+
+        $qrcode = $qrcode_path . 'bdacode-' . $post_type . '-' . $post_id . '.png';
+        $qrcode_link = $uploads['url'] . '/wxacode/' . 'bdacode-' . $post_type . '-' . $post_id . '.png';
+        if (is_file($qrcode)) {
+            return $this->make_success($qrcode_link);
+        }
+
+
+        $access_token = $session['access_token'];
+        if (empty($access_token)) {
+            return $this->make_error('获取二维码失败');
+        }
+
+        $api = $baseUrl . $access_token;
+
+
+        $data = array(
+            'path' => 'pages/article/article?post_id=' . $post_id,
+            // 'width' => 430, 尺寸 默认430
+            // 'mf' => 1 是否包含logo 1001不包含 默认包含
+        );
+        $args = array(
+            'method'  => 'POST',
+            'body' 	  => $data,
+            'headers' => array(),
+            'cookies' => array()
+        );
+
+        $content = $this->http_post_data($api, json_encode($args));
+        if (!$content) {
+            return $this->make_error('系统异常');
+        }
+
+
+        $write_fd = @fopen($qrcode, 'w+');
+        if (fwrite($write_fd, $content)) {
+            fclose($write_fd);
+        }
+
+        return $this->make_success($qrcode_link);
+    }
+
+    /**
+     * 获取小程序码
+     * @throws Typecho_Plugin_Exception
+     */
+    public function get_qqacode()
+    {
+        $post_id = $this->request->get('post_id', 0);
+        if (!$post_id ) {
+            return $this->make_error('缺少参数');
+        }
+
+        $post_type = self::get_post_type($post_id);
+
+
+        $uploads = self::tp_uploads_dir();
+        $qrcode_path = $uploads['path'] . '/qqacode/';
+        if (!is_dir($qrcode_path)) {
+            mkdir($qrcode_path, 0755, true);
+        }
+
+        // 小程序码数量有限，所以不再单独为每篇文章生成
+
+        $session = $this->getQQSession();
+        $post_type = 'mp-qq';
+        $baseUrl = 'https://api.q.qq.com/api/json/qqa/CreateMiniCode?access_token=';
+
+        $qrcode = $qrcode_path . 'wxacode-' . $post_type . '-' . $post_id . '.png';
+        $qrcode_link = $uploads['url'] . '/qqacode/' . 'qqacode-' . $post_type . '-' . $post_id . '.png';
+        if (is_file($qrcode)) {
+            return $this->make_success($qrcode_link);
+        }
+
+
+        $access_token = $session['access_token'];
+        if (empty($access_token)) {
+            return $this->make_error('获取二维码失败');
+        }
+
+        $api = $baseUrl . $access_token;
+
+        $color = array(
+            "r" => "0",  //这个颜色码自己到Photoshop里设
+            "g" => "0",  //这个颜色码自己到Photoshop里设
+            "b" => "0",  //这个颜色码自己到Photoshop里设
+        );
+
+        $page = 'pages/article/article';
+
+        $data = array(
+            'scene' => $post_id, //TODO 自定义信息，可以填写诸如识别用户身份的字段，注意用中文时的情况
+            'appid' => self::option_value('qq_app_id'),
+            'page' => $page, // 前端传过来的页面path,不能为空，最大长度 128 字节
+            'path' => $page,
+            'width' => 200, // 设置二维码尺寸,二维码的宽度
+            'auto_color' => false, // 自动配置线条颜色，如果颜色依然是黑色，则说明不建议配置主色调
+            'line_color' => $color, // auth_color 为 false 时生效，使用 rgb 设置颜色 例如 {"r":"xxx","g":"xxx","b":"xxx"},十进制表示
+            'is_hyaline' => true, // 是否需要透明底色， is_hyaline 为true时，生成透明底色的小程序码
+        );
+
+        $content = $this->http_post_data($api, json_encode($data));
+        if (!$content) {
+            return $this->make_error('系统异常');
+        }
+
+
+        $write_fd = @fopen($qrcode, 'w+');
+        if (fwrite($write_fd, $content)) {
+            fclose($write_fd);
+        }
 
         return $this->make_success($qrcode_link);
     }
@@ -1144,25 +1316,25 @@ class OneTypecho_Action extends Typecho_Widget implements Widget_Interface_Do
         $code = $this->request->get('code', '');
         $encrypted_data = $this->request->get('encrypted_data', '');
         $iv = $this->request->get('iv', '');
-        $plantform = $this->request->get('plantform','');
+        $plantform = $this->request->get('plantform', '');
 
         if (empty($code) || empty($encrypted_data) || empty($iv) || empty($plantform)) {
             return $this->make_error('缺少参数');
         }
-        if ($plantform == "mp-weixin"){
+        if ($plantform == "mp-weixin") {
             $baseurl = 'https://api.weixin.qq.com/sns/jscode2session?appid=%s&secret=%s&js_code=%s&grant_type=authorization_code';
             $app_id = self::option_value('app_id');
             $app_secret = self::option_value('app_secret');
-        }elseif($plantform == "mp-qq"){
+        } elseif ($plantform == "mp-qq") {
             $baseurl = 'https://api.q.qq.com/sns/jscode2session?appid=%s&secret=%s&js_code=%s&grant_type=authorization_code';
             $app_id = self::option_value('qq_app_id');
             $app_secret = self::option_value('qq_app_secret');
-        }else{
+        } else {
             return $this->make_error('平台不支持');
         }
 
 
-        $url = sprintf($baseurl, $app_id,$app_secret, $code);
+        $url = sprintf($baseurl, $app_id, $app_secret, $code);
         $info = file_get_contents($url);
         $json = json_decode($info);//对json数据解码
         $session = get_object_vars($json);
@@ -1178,7 +1350,7 @@ class OneTypecho_Action extends Typecho_Widget implements Widget_Interface_Do
 
         $auth_code = $this->decryptData($app_id, $session['session_key'], urldecode($encrypted_data), urldecode($iv), $data);
         if ($auth_code != 0) {
-            return $this->make_error('授权失败'.$session['errcode'].$session['errmsg'],$auth_code);
+            return $this->make_error('授权失败' . $session['errcode'] . $session['errmsg'], $auth_code);
         }
 
         $user_data = json_decode($data, true);
@@ -1205,7 +1377,7 @@ class OneTypecho_Action extends Typecho_Widget implements Widget_Interface_Do
 //            }
         } else {
             $user = $this->get_user_by('login', $open_id);
-            $user_id = $this->tp_update_user($user->uid,[
+            $user_id = $this->tp_update_user($user->uid, [
                 'screenName' => $user_data['nickName'],
             ]);
 
@@ -1215,7 +1387,7 @@ class OneTypecho_Action extends Typecho_Widget implements Widget_Interface_Do
         }
         $one_token = $this->generate_token();
 
-        $this->tp_update_user($user_id,[
+        $this->tp_update_user($user_id, [
             'avatarUrl' => $user_data['avatarUrl'],
             'one_token' => $one_token
         ]);
@@ -1224,7 +1396,7 @@ class OneTypecho_Action extends Typecho_Widget implements Widget_Interface_Do
             "nickname" => $user_data["nickName"],
             "avatar" => $user_data["avatarUrl"],
             "token" => $one_token,
-            "ext_mail" => !empty($user_data["ext_mail"])?$user_data["ext_mail"]:''
+            "ext_mail" => !empty($user_data["ext_mail"]) ? $user_data["ext_mail"] : ''
         );
 
         return $this->make_success($user);
@@ -1240,7 +1412,7 @@ class OneTypecho_Action extends Typecho_Widget implements Widget_Interface_Do
         $code = $this->request->get('code', '');
         $nickname = $this->request->get('nickname', '');
         $avatar = $this->request->get('avatar', '');
-        $channel = $this->request->get('channel','');
+        $channel = $this->request->get('channel', '');
 
         if (empty($code) || empty($nickname) || empty($avatar) || empty($channel)) {
             return $this->make_error('缺少参数');
@@ -1271,21 +1443,21 @@ class OneTypecho_Action extends Typecho_Widget implements Widget_Interface_Do
 
         } else {
             $user = $this->get_user_by('login', $open_id);
-            $user_id = $this->tp_update_user($user->uid,[
+            $user_id = $this->tp_update_user($user->uid, [
                 'screenName' => $nickname,
             ]);
 
         }
         $one_token = $this->generate_token();
         //如果每次都同步微信头像 会导致小程序设置的头像失效；所以没有头像时，才同步头像
-        $userUrl = $this->get_user_meta($user_id,'avatarUrl');
-        if(empty($userUrl)){
-            $this->tp_update_user($user_id,[
+        $userUrl = $this->get_user_meta($user_id, 'avatarUrl');
+        if (empty($userUrl)) {
+            $this->tp_update_user($user_id, [
                 'avatarUrl' => $avatar,
                 'one_token' => $one_token
             ]);
-        }else{
-            $this->tp_update_user($user_id,[
+        } else {
+            $this->tp_update_user($user_id, [
                 'one_token' => $one_token
             ]);
             $avatar = $userUrl;
@@ -1295,7 +1467,7 @@ class OneTypecho_Action extends Typecho_Widget implements Widget_Interface_Do
             "nickname" => $nickname,
             "avatar" => $avatar,
             "token" => $one_token,
-            "ext_mail" => !empty($user_data["ext_mail"])?$user_data["ext_mail"]:''
+            "ext_mail" => !empty($user_data["ext_mail"]) ? $user_data["ext_mail"] : ''
         );
 
         return $this->make_success($user);
@@ -1315,52 +1487,54 @@ class OneTypecho_Action extends Typecho_Widget implements Widget_Interface_Do
             return $this->make_error('登录失败');
         }
         $one_token = $this->generate_token();
-        $this->tp_update_user($user->uid,[
+        $this->tp_update_user($user->uid, [
             'one_token' => $one_token
         ]);
         $userdata = array(
             "nickname" => $user->screenName,
-            "avatar" => !empty($user->avatarUrl)?$user->avatarUrl:$user->userAvatar,
+            "avatar" => !empty($user->avatarUrl) ? $user->avatarUrl : $user->userAvatar,
             "token" => $one_token,
-            "ext_mail" => !empty($user->ext_mail)?$user->ext_mail:$user->mail
+            "ext_mail" => !empty($user->ext_mail) ? $user->ext_mail : $user->mail
         );
 
         return $this->make_success($userdata);
     }
 
-    public function geturl($url, $data){
+    public function geturl($url, $data)
+    {
         $query = '';
-        if(!empty($data)){
-            $query = '?'.http_build_query($data);
+        if (!empty($data)) {
+            $query = '?' . http_build_query($data);
         }
-        $headerArray =array("Content-type:application/json;","Accept:application/json");
+        $headerArray = array("Content-type:application/json;", "Accept:application/json");
         $ch = curl_init();
-        curl_setopt($ch, CURLOPT_URL, $url.$query);
+        curl_setopt($ch, CURLOPT_URL, $url . $query);
         curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, FALSE);
         curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, FALSE);
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
-        curl_setopt($ch,CURLOPT_HTTPHEADER,$headerArray);
+        curl_setopt($ch, CURLOPT_HTTPHEADER, $headerArray);
         $output = curl_exec($ch);
         curl_close($ch);
-        $output = json_decode($output,true);
+        $output = json_decode($output, true);
         return $output;
     }
 
 
-    public function posturl($url,$data){
-        $data  = json_encode($data);
-        $headerArray =array("Content-type:application/json;charset='utf-8'","Accept:application/json");
+    public function posturl($url, $data)
+    {
+        $data = json_encode($data);
+        $headerArray = array("Content-type:application/json;charset='utf-8'", "Accept:application/json");
         $curl = curl_init();
         curl_setopt($curl, CURLOPT_URL, $url);
         curl_setopt($curl, CURLOPT_SSL_VERIFYPEER, FALSE);
-        curl_setopt($curl, CURLOPT_SSL_VERIFYHOST,FALSE);
+        curl_setopt($curl, CURLOPT_SSL_VERIFYHOST, FALSE);
         curl_setopt($curl, CURLOPT_POST, 1);
         curl_setopt($curl, CURLOPT_POSTFIELDS, $data);
-        curl_setopt($curl,CURLOPT_HTTPHEADER,$headerArray);
+        curl_setopt($curl, CURLOPT_HTTPHEADER, $headerArray);
         curl_setopt($curl, CURLOPT_RETURNTRANSFER, 1);
         $output = curl_exec($curl);
         curl_close($curl);
-        return json_decode($output,true);
+        return json_decode($output, true);
     }
 
     private function wx_code2openid($code)
@@ -1378,7 +1552,7 @@ class OneTypecho_Action extends Typecho_Widget implements Widget_Interface_Do
             'grant_type' => 'authorization_code'
         ];
 
-        $result = $this->geturl( 'https://api.weixin.qq.com/sns/jscode2session',$params);
+        $result = $this->geturl('https://api.weixin.qq.com/sns/jscode2session', $params);
 
         if (!is_array($result)) {
             return false;
@@ -1405,7 +1579,7 @@ class OneTypecho_Action extends Typecho_Widget implements Widget_Interface_Do
             'grant_type' => 'authorization_code'
         ];
 
-        $result = $this->geturl('https://api.q.qq.com/sns/jscode2session',$params);
+        $result = $this->geturl('https://api.q.qq.com/sns/jscode2session', $params);
         if (!is_array($result)) {
             return false;
         }
@@ -1430,7 +1604,7 @@ class OneTypecho_Action extends Typecho_Widget implements Widget_Interface_Do
             'code' => $code,
         ];
 
-        $result = $this->geturl('https://spapi.baidu.com/oauth/jscode2sessionkey',$params);
+        $result = $this->geturl('https://spapi.baidu.com/oauth/jscode2sessionkey', $params);
         if (!is_array($result)) {
             return false;
         }
@@ -1488,8 +1662,8 @@ class OneTypecho_Action extends Typecho_Widget implements Widget_Interface_Do
             return $this->make_error('还没有登陆', -1);
         }
 
-        $table_post_like = $this->db->getPrefix(). 'one_post_like';
-        $post_like_id = $this->db->fetchRow($this->db->query("SELECT id FROM `$table_post_like` WHERE user_id=".$user_id." AND post_id=".$post_id))["id"];
+        $table_post_like = $this->db->getPrefix() . 'one_post_like';
+        $post_like_id = $this->db->fetchRow($this->db->query("SELECT id FROM `$table_post_like` WHERE user_id=" . $user_id . " AND post_id=" . $post_id))["id"];
 
         $post_likes = self::get_post_meta($post_id, "likes", true);
 
@@ -1524,8 +1698,8 @@ class OneTypecho_Action extends Typecho_Widget implements Widget_Interface_Do
             return $this->make_error('还没有登陆', -1);
         }
 
-        $table_post_favorite = $this->db->getPrefix(). 'one_post_favorite';
-        $post_favorite_id = $this->db->fetchRow($this->db->query("SELECT id FROM `$table_post_favorite` WHERE user_id=".$user_id." AND post_id=".$post_id))["id"];
+        $table_post_favorite = $this->db->getPrefix() . 'one_post_favorite';
+        $post_favorite_id = $this->db->fetchRow($this->db->query("SELECT id FROM `$table_post_favorite` WHERE user_id=" . $user_id . " AND post_id=" . $post_id))["id"];
 
         $post_favorites = self::get_post_meta($post_id, "favorites", true);
 
@@ -1558,15 +1732,15 @@ class OneTypecho_Action extends Typecho_Widget implements Widget_Interface_Do
 
         $token = $this->request->get('token', '');
         $user = [];
-        if ($token != 'false'){
-            $user = $this->db->fetchRow($this->db->select('uid','ext_mail')->from('table.users')->where('one_token = ?',$token));
-            if (empty($user['uid'])){
+        if ($token != 'false') {
+            $user = $this->db->fetchRow($this->db->select('uid', 'ext_mail')->from('table.users')->where('one_token = ?', $token));
+            if (empty($user['uid'])) {
                 return $this->make_success([
 //                    "comments" => [],
 //                    "user_mail" => ''
                 ]);
             }
-        }else{
+        } else {
             $user['uid'] = null;
         }
 
@@ -1595,7 +1769,7 @@ class OneTypecho_Action extends Typecho_Widget implements Widget_Interface_Do
             return $this->make_error('未登录', -1);
         }
         if ($token == 'false') return $this->make_error('未登录', -1);
-        $user = $this->db->fetchRow($this->db->select()->from('table.users')->where('one_token = ?',$token));
+        $user = $this->db->fetchRow($this->db->select()->from('table.users')->where('one_token = ?', $token));
         $user_id = $user['uid'];
         if (!$user_id) {
             return $this->make_error('还没有登陆', -1);
@@ -1616,11 +1790,11 @@ class OneTypecho_Action extends Typecho_Widget implements Widget_Interface_Do
 //            'spam'      =>  _t('垃圾')
         $comment_approved = self::option_value('JSwitch_comment_verify') === '1' ? 'hold' : 'approved';
 
-        if ($c_mail){
-            if (!Utils::Verify_Email($c_mail)){
+        if ($c_mail) {
+            if (!Utils::Verify_Email($c_mail)) {
                 return $this->make_error("邮箱不合法");
             }
-            $rows = $this->db->fetchRow($this->db->select('uid')->from('table.users')->where('ext_mail = ?',$c_mail));
+            $rows = $this->db->fetchRow($this->db->select('uid')->from('table.users')->where('ext_mail = ?', $c_mail));
 //            if (isset($rows['uid']) and $rows['uid'] != $user_id){ // 已经存在相同邮箱用户
 //                return $this->make_error("已经存在相同邮箱用户");
 //            }else{
@@ -1628,12 +1802,12 @@ class OneTypecho_Action extends Typecho_Widget implements Widget_Interface_Do
 //                    'ext_mail' => $c_mail
 //                ]);
 //            }
-            $this->tp_update_user($user_id,[
+            $this->tp_update_user($user_id, [
                 'ext_mail' => $c_mail
             ]);
         }
-        $post = $this->db->fetchObject($this->db->select('authorId')->from('table.contents')->where('cid = ?',$post_id));
-        if(empty((array)$post_id)){
+        $post = $this->db->fetchObject($this->db->select('authorId')->from('table.contents')->where('cid = ?', $post_id));
+        if (empty((array)$post_id)) {
             return $this->make_error("文章不存在");
         }
         $comment_id = $this->db->query($this->db->insert('table.comments')->rows([
@@ -1657,7 +1831,7 @@ class OneTypecho_Action extends Typecho_Widget implements Widget_Interface_Do
             $this->db->query($this->db->update('table.contents')->rows(array('commentsNum' => (int)$row['commentsNum'] + 1))->where('cid = ?', $post_id));
         }
 
-        return $this->make_success(['add_count' => $comment_approved,'comment_id'=>$comment_id,'user'=>$user]);
+        return $this->make_success(['add_count' => $comment_approved, 'comment_id' => $comment_id, 'user' => $user]);
     }
 
     /**
@@ -1678,7 +1852,7 @@ class OneTypecho_Action extends Typecho_Widget implements Widget_Interface_Do
             return $this->make_error('缺少参数');
         }
 
-        $table_comments = $this->db->getPrefix(). 'comments';
+        $table_comments = $this->db->getPrefix() . 'comments';
         $res = $this->db->query("DELETE FROM $table_comments WHERE coid=$comment_id OR parent=$comment_id");
         if ($post_id > 0) {
             $row = $this->db->fetchRow($this->db->select('commentsNum')->from('table.contents')->where('cid = ?', $post_id));
@@ -1753,27 +1927,28 @@ class OneTypecho_Action extends Typecho_Widget implements Widget_Interface_Do
             return false;
         }
         if ($token == 'false') return '';
-        $user_id = $this->db->fetchRow($this->db->select('uid')->from('table.users')->where('one_token = ?',$token))['uid'];
+        $user_id = $this->db->fetchRow($this->db->select('uid')->from('table.users')->where('one_token = ?', $token))['uid'];
 
-        return $user_id ? $user_id:false;
+        return $user_id ? $user_id : false;
     }
 
     /**
      * 获取上传目录
      * @return array
      */
-    private function tp_uploads_dir(){
+    private function tp_uploads_dir()
+    {
         $uploads = [];
         $options = Helper::options();
         $date = new Typecho_Date();
         $up_path = defined('__TYPECHO_UPLOAD_DIR__') ? __TYPECHO_UPLOAD_DIR__ : UPLOAD_DIR;
 
         $path = Typecho_Common::url($up_path,
-                defined('__TYPECHO_UPLOAD_ROOT_DIR__') ? __TYPECHO_UPLOAD_ROOT_DIR__ : __TYPECHO_ROOT_DIR__);
-        $uploads['path'] = $path. '/' . $date->year . '/' . $date->month;
-        $uploads['baseurl'] = $options->index.$up_path;
+            defined('__TYPECHO_UPLOAD_ROOT_DIR__') ? __TYPECHO_UPLOAD_ROOT_DIR__ : __TYPECHO_ROOT_DIR__);
+        $uploads['path'] = $path . '/' . $date->year . '/' . $date->month;
+        $uploads['baseurl'] = $options->index . $up_path;
         $uploads['basedir'] = $path;
-        $uploads['url'] = $options->index.$up_path. '/' . $date->year . '/' . $date->month;
+        $uploads['url'] = $options->index . $up_path . '/' . $date->year . '/' . $date->month;
         return $uploads;
     }
 
@@ -1791,10 +1966,10 @@ class OneTypecho_Action extends Typecho_Widget implements Widget_Interface_Do
     {
 
         $ErrorCode = array(
-            'OK'                => 0,
-            'IllegalAesKey'     => -41001,
-            'IllegalIv'         => -41002,
-            'IllegalBuffer'     => -41003,
+            'OK' => 0,
+            'IllegalAesKey' => -41001,
+            'IllegalIv' => -41002,
+            'IllegalBuffer' => -41003,
             'DecodeBase64Error' => -41004
         );
 
@@ -1809,7 +1984,7 @@ class OneTypecho_Action extends Typecho_Widget implements Widget_Interface_Do
         $aesCipher = base64_decode($encryptedData);
         $result = openssl_decrypt($aesCipher, "AES-128-CBC", $aesKey, 1, $aesIV);
         $data_decode = json_decode($result);
-        if ($data_decode  == NULL) {
+        if ($data_decode == NULL) {
             return array('code' => $ErrorCode['IllegalBuffer'], 'message' => '解密失败，非法缓存');
         }
         if ($data_decode->watermark->appid != $appid) {
@@ -1818,6 +1993,7 @@ class OneTypecho_Action extends Typecho_Widget implements Widget_Interface_Do
         $data = $result;
         return $ErrorCode['OK'];
     }
+
     /**
      * 获取access token
      * @return false|mixed
@@ -1835,11 +2011,12 @@ class OneTypecho_Action extends Typecho_Widget implements Widget_Interface_Do
         }
         $app_id = self::option_value('app_id');
         $app_secret = self::option_value('app_secret');
+        if(!$app_id || !$app_secret) return false;
         $url = 'https://api.weixin.qq.com/cgi-bin/token?grant_type=client_credential&appid=' . $app_id . '&secret=' . $app_secret;
         $info = file_get_contents($url);
         $json = json_decode($info);
         $arr = get_object_vars($json);
-        if (!$arr['access_token']){
+        if (!$arr['access_token']) {
             return false;
         }
         $arr['expires_in'] = $arr['expires_in'] + time() - 200;
@@ -1859,11 +2036,13 @@ class OneTypecho_Action extends Typecho_Widget implements Widget_Interface_Do
         }
         $app_id = self::option_value('qq_app_id');
         $app_secret = self::option_value('qq_app_secret');
+        if(!$app_id || !$app_secret) return false;
+
         $url = 'https://api.q.qq.com/api/getToken?grant_type=client_credential&appid=' . $app_id . '&secret=' . $app_secret;
         $info = file_get_contents($url);
         $json = json_decode($info);
         $arr = get_object_vars($json);
-        if (!$arr['access_token']){
+        if (!$arr['access_token']) {
             return false;
         }
         $arr['expires_in'] = $arr['expires_in'] + time() - 200;
@@ -1871,6 +2050,31 @@ class OneTypecho_Action extends Typecho_Widget implements Widget_Interface_Do
         return $arr; // access_token
     }
 
+    private function getBDSession(){
+        $path_token = $this->plugin_dir . '/token_data/bd_access_token.data';
+        if (file_exists($path_token)) {
+            $str_token = file_get_contents($path_token);
+            $access_token = json_decode($str_token, TRUE);
+            if ($access_token['expires_in'] > time()) {
+                return $access_token;
+            }
+        }
+        $app_id = self::option_value('bd_app_key');
+        $app_secret = self::option_value('bd_app_secret');
+        if(!$app_id || !$app_secret) return false;
+
+        $url = "https://openapi.baidu.com/oauth/2.0/token?grant_type=client_credentials&client_id=$app_id&client_secret=$app_secret&scope=smartapp_snsapi_base
+		";
+        $info = file_get_contents($url);
+        $json = json_decode($info);
+        $arr = get_object_vars($json);
+        if (!$arr['access_token']) {
+            return false;
+        }
+        $arr['expires_in'] = $arr['expires_in'] + time() - 200;
+        file_put_contents($path_token, json_encode($arr));
+        return $arr; // access_token
+    }
     private function http_post_data($url, $data_string)
     {
         $ch = curl_init();
@@ -1891,14 +2095,16 @@ class OneTypecho_Action extends Typecho_Widget implements Widget_Interface_Do
         //  return array($return_code, $return_content);
         return $return_content;
     }
-    function random_code($length = 8,$chars = null){
-        if(empty($chars)){
+
+    function random_code($length = 8, $chars = null)
+    {
+        if (empty($chars)) {
             $chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
         }
         $count = strlen($chars) - 1;
         $code = '';
-        while( strlen($code) < $length){
-            $code .= substr($chars,rand(0,$count),1);
+        while (strlen($code) < $length) {
+            $code .= substr($chars, rand(0, $count), 1);
         }
         return $code;
     }
@@ -1906,5 +2112,105 @@ class OneTypecho_Action extends Typecho_Widget implements Widget_Interface_Do
     private static function generate_token()
     {
         return md5(uniqid(rand()));
+    }
+
+    /**
+     * 圈子
+     *
+     */
+    public function circle_hot()
+    {
+        $circles = CircleFollow::getHotCircles();
+        return $this->make_success($circles);
+    }
+
+    public function circle_hot_list()
+    {
+        // test
+        $offset = $this->request->get('offset', 0);
+
+        $args = [
+            'posts_per_page' => self::POSTS_PER_PAGE,
+            'offset' => $offset,
+            'orderby' => 'views',
+            'order' => 'DESC'
+        ];
+
+        $hide_cat = self::option_value('JHide_cat');
+        if (!empty($hide_cat)) {
+            $args['category__not_in'] = explode(',', $hide_cat);
+        }
+
+
+        $select = $this->db->select();
+        $select = $this->queryPost($select, $args);
+        $common_posts = $this->db->fetchAll($select);
+
+        $data = [
+            'per_page' => self::POSTS_PER_PAGE,
+            'current_page' => ($offset / self::POSTS_PER_PAGE) + 1,
+            'data' => []
+        ];
+
+        foreach ($common_posts as $post) {
+            $postObj = Typecho_Widget::widget('Widget_Contents_Modify@tmp_' . $post['cid']);
+            $postObj->push($post);
+
+            $tmp = [
+                'id' => $postObj->cid,
+                'uid' => $postObj->authorId,
+                'circle_id' => $postObj->categoryId,
+                'title' => $postObj->title,
+                'content' => $postObj->excerpt(),
+                'media' => [$this::GetRandomThumbnail($postObj->text)],
+                'read_count' => $postObj->views,
+                'create_time' => $postObj->created,
+                'comment_count' => $postObj->commentsNum,
+                'fabulous_count' => $postObj->views, // 点赞
+                'collection_count' => 0, // 收藏 数 todo
+                'is_collection' => false, // todo
+                'type' => 1, // 1张图片
+                'userInfo' => [
+                    'username' => $postObj->author->screenName,
+                    'avatar' => empty($postObj->author->avatarUrl) ? $postObj->author->userAvatar : $postObj->author->avatarUrl,
+                ],
+                'topicInfo' => [
+                    'cate_id' => $postObj->categoryId,
+                    'topic_name' => $postObj->categoryArray['name']
+                ]
+            ];
+            array_push($data['data'], $tmp);
+        }
+        return $this->make_success($data);
+    }
+
+    public function circle_follow_user()
+    {
+        $fid = $this->request->get('fid', '');
+        if(!$fid){
+            return $this->make_error('参数错误');
+        }
+        $user_id = self::check_login();
+        if(!$user_id) return $this->make_error_notlogin('没有登录');
+        if(UserFollow::addFollow($user_id,intval($fid))){
+            return $this->make_success();
+        }
+        return $this->make_error('error');
+    }
+
+    public function circle_cancel_follow_user()
+    {
+        $fid = $this->request->get('fid', '');
+        if(!$fid){
+            return $this->make_error('参数错误');
+        }
+
+        $user_id = self::check_login();
+        if(!$user_id) return $this->make_error_notlogin('没有登录');
+        if(UserFollow::cancleFollow($user_id,intval($fid))){
+            return $this->make_success();
+        }
+        return $this->make_error('error');
+
     }
 }
