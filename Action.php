@@ -1,5 +1,7 @@
 <?php
 header('Access-Control-Allow-Origin: *');
+ini_set("display_errors", 0);
+error_reporting(E_ALL ^ E_NOTICE);
 error_reporting(E_ALL ^ E_WARNING);
 require_once 'Utils.php';
 require_once 'libs/CircleFollow.php';
@@ -257,7 +259,7 @@ class OneTypecho_Action extends Typecho_Widget implements Widget_Interface_Do
             ];
 
             if (self::option_value('JSwitch_excerpt') == '1') {
-                if ($post->excerpt) {
+                if (is_object($post) and $post->excerpt) {
                     $item["excerpt"] = html_entity_decode(self::tp_trim_words($post['text'], 50, '...'));
                 } else {
                     $content = $post['text'];
